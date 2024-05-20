@@ -4,8 +4,9 @@ A stress test tool for Minecraft servers. Tested on versions 1.8.X to 1.18.X.
 I created this tool to experiment with C and sockets, so it may not be the best (very buggy), yet it _seems_ to work.
 
 ## Screenshots
-![](https://i.imgur.com/4bkapS3.png)
-![](https://i.imgur.com/wcEStE7.png)
+<img src="https://i.imgur.com/4bkapS3.png" width="400">
+
+<img src="https://i.imgur.com/wcEStE7.png" width="400">
 
 ## Usage
 Compile the code first
