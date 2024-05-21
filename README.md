@@ -25,7 +25,7 @@ gcc main.c -o charcoal
 
 `-t thread number`: (_optional_, _default_=10) Number of threads to use
 
-`-m mode`: (_optional_, _defualt_=flood) Specify the bot mode (*flood* or *stay*)
+`-m mode`: (_optional_, _default_=flood) Specify the bot mode (*flood* or *stay*)
 
 `-c message`: (_optional_) Set the message that bots should send
 
@@ -33,7 +33,7 @@ gcc main.c -o charcoal
 
 `-x proxy file`: (_optional_) Proxy file
 
-`-k proxy type`: (_optional_, default=https) Proxy type (https or socks5)
+`-k proxy type`: (_optional_, _default_=https) Proxy type (https or socks5)
 
 ## Disclaimer
 I am not affiliated with Minecraft or Microsoft in any way. Please use Charcoal responsibly and only for authorized purposes.
