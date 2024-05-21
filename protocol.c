@@ -137,8 +137,7 @@ void ping_packet(char *address, int port, int action, char **packet, int *size) 
     int protocol_size, address_len_size, port_size, packet_len_size;
     to_varint(protocol, &protocol_buf, &protocol_size);
     to_varint(strlen(address), &address_len_buf, &address_len_size);
-    to_varint((unsigned short)port, &port_buf, &port_size);
-    int packet_len = 1 + protocol_size + address_len_size + strlen(address) + port_size + 1;
+    int packet_len = 1 + protocol_size + address_len_size + strlen(address) + 2 + 1;
     to_varint(packet_len, &packet_len_buf, &packet_len_size);
     *packet = (char *)malloc(packet_len + packet_len_size);
     int written = 0;
@@ -151,12 +150,11 @@ void ping_packet(char *address, int port, int action, char **packet, int *size) 
     written += address_len_size;
     memcpy(*packet + written, address, strlen(address));
     written += strlen(address);
-    memcpy(*packet + written, port_buf, port_size);
-    written += port_size;
+    (*packet)[written++] = (char)(port >> 8);
+    (*packet)[written++] = (char)(port & 0x80ff);
     (*packet)[written++] = (char)action;
     *size = written;
     free(protocol_buf);
     free(address_len_buf);
-    free(port_buf);
     free(packet_len_buf);
 }

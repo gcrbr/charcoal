@@ -11,13 +11,17 @@
 
 #include "protocol.c"
 #include "utils.c"
-#include "proxies.c"
+#include "proxy.c"
 
 #define MODE_STAY 0
 #define MODE_FLOOD 1
 
+#define HTTPS 0
+#define SOCKS5 1
+
 int protocol;
-int mode = MODE_FLOOD;
+int bot_mode = MODE_FLOOD;
+int proxy_mode = HTTPS;
 
 void bot_connect(char *address, int port, char *username, int thread, char *message, char *proxy_address, int proxy_port) {
     struct sockaddr_in server;
@@ -70,32 +74,40 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
     int packet_size = 0;
 
     if(proxy_port != -1) {
-        char https[256];
-        sprintf(https, "CONNECT %s:%d HTTP/1.1\r\n\r\n", proxy_address, proxy_port);
-        send(sock, https, strlen(https), 2);
+        if(proxy_mode == HTTPS) {
+            char https[256];
+            build_https_proxy_connect(https, address, conn_port);
+            send(sock, https, strlen(https), MSG_NOSIGNAL);
+        }else if(proxy_mode == SOCKS5) {
+            char *socks5_connect_request;
+            int socks5_size = 0;
+            send(sock, socks5_handshake, 3, MSG_NOSIGNAL);
+            build_socks5_proxy_connect(address, conn_port, &socks5_connect_request, &socks5_size);
+            send(sock, socks5_connect_request, socks5_size, MSG_NOSIGNAL);
+            free(socks5_connect_request);
+        }
     }
 
     ping_packet(address, port, 2, &packet, &packet_size);
-    send(sock, packet, packet_size, 2);
+    send(sock, packet, packet_size, MSG_NOSIGNAL);
     join_packet(username, &packet, &packet_size);
-    send(sock, packet, packet_size, 2);
+    send(sock, packet, packet_size, MSG_NOSIGNAL);
     
     free(conn_address);
-    packet = NULL;
 
-    while(1) {
-        if(strlen(message) > 0) {
-            if(packet == NULL) {
-                chat_message_packet(message, &packet, &packet_size);
+    sleep(1);
+
+    if(strlen(message) > 0) {
+        chat_message_packet(message, &packet, &packet_size);
+        send(sock, packet, packet_size, MSG_NOSIGNAL);
+    }
+
+    if(bot_mode == MODE_STAY) {
+        while(1) {
+            if(send(sock, "\0", 1, MSG_NOSIGNAL) == -1) {
+                printf("[%sINFO%s][%sTHREAD%03d%s] Connection closed\n", COLOR_GREEN, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET);
+                break;
             }
-            send(sock, packet, packet_size, 2);
-        }
-        sleep(1);
-        if(mode == MODE_FLOOD) {
-            break;
-        }
-        if(!send(sock, "\0", 1, 2) || !read(sock, NULL, 1024)) {
-            printf("[%sINFO%s][%sTHREAD%03d%s] Connection closed\n", COLOR_GREEN, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET);
         }
     }
 
@@ -136,7 +148,7 @@ void *bot_loop(void *args) {
 }
 
 void print_help(char *executable) {
-    printf("usage: %s -i address [-p port] [-t thread number] [-x proxy file] [-m mode] [-c message] [-v protocol version]\n", executable);
+    printf("usage: %s -i address [-p port] [-t thread number] [-m mode] [-c message] [-v protocol version] [-x proxy file] [-k proxy type]\n", executable);
     exit(1);
 }
 
@@ -149,12 +161,12 @@ int main(int argc, char *argv[]) {
     char address[256];
     int port = 25565;
     char proxy_file[256];
-    char message[256];
+    char message[256] = "";
 
     init_random();
 
     int opt;
-    while((opt = getopt(argc, argv, "i:p:t:x:m:v:c:h")) != -1) {
+    while((opt = getopt(argc, argv, "i:p:t:x:m:v:c:hk:")) != -1) {
         switch(opt) {
             case 'i':
                 strcpy(address, optarg);
@@ -188,11 +200,22 @@ int main(int argc, char *argv[]) {
             case 'm':
                 strtolower(optarg);
                 if(!strcmp(optarg, "stay")) {
-                    mode = MODE_STAY;
+                    bot_mode = MODE_STAY;
                 }else if(!strcmp(optarg, "flood")) {
-                    mode = MODE_FLOOD;
+                    bot_mode = MODE_FLOOD;
                 }else {
                     fprintf(stderr, "[%sERROR%s] Invalid mode '%s', available modes: STAY, FLOOD\n", COLOR_RED, COLOR_RESET, optarg);
+                    exit(1);
+                }
+                break;
+            case 'k':
+                strtolower(optarg);
+                if(!strcmp(optarg, "https")) {
+                    proxy_mode = HTTPS;
+                }else if(!strcmp(optarg, "socks") || strcmp(optarg, "socks5")) {
+                    proxy_mode = SOCKS5;
+                }else {
+                    fprintf(stderr, "[%sERROR%s] Invalid proxy type '%s', available types: HTTPS, SOCKS5\n", COLOR_RED, COLOR_RESET, optarg);
                     exit(1);
                 }
                 break;
@@ -217,7 +240,7 @@ int main(int argc, char *argv[]) {
 
     pthread_t threads[thread_number];
     
-    for(int i=0; i < thread_number; ++i) {
+    for(int i = 0; i < thread_number; ++i) {
         struct args *func_args = (struct args *)malloc(sizeof(struct args));
         func_args->address = address;
         func_args->port = port;
@@ -225,14 +248,12 @@ int main(int argc, char *argv[]) {
         func_args->proxies = proxies;
         func_args->proxy_amount = proxy_amount;
         func_args->message = message;
-        if(pthread_create(&threads[i], NULL, bot_loop, (void *)func_args) != 0) {
-            threads[i] = NULL;
-        }
+        pthread_create(&threads[i], NULL, bot_loop, (void *)func_args);
     }
 
     for(int i=0; i < thread_number; ++i) {
-        if(threads[i] != NULL) {
-            pthread_join(threads[i], NULL);
-        }
+        pthread_join(threads[i], NULL);
     }
+
+    return 0;
 }
