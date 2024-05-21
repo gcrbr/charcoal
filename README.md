@@ -11,10 +11,10 @@ This tool was created to experiment with C and sockets, so it may not be the bes
 ## Usage
 Compile the code first
 ```
-gcc main.c -o charcoal
+gcc main.c -o charcoal -lresolv
 ```
 
-&nbsp;
+Then you can run it:
 
 ```
 ./charcoal -i address [-p port] [-t thread number] [-m mode] [-c message] [-v protocol version] [-x proxy file] [-k proxy type]

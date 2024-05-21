@@ -22,7 +22,7 @@ char *random_string(int length) {
     return result;
 }
 
-int ipaddress_valid(char *ip) {
+int ipaddress_valid(const char *ip) {
     for(int i = 0; i < strlen(ip); ++i) {
         if(((int)ip[i] < 48 || (int)ip[i] > 57) && (int)ip[i] != 46) {
             return 0;
@@ -40,12 +40,11 @@ int ipaddress_valid(char *ip) {
     return 1;
 }
 
-void parse_proxy(char *proxy, char *address, int *port) {
-    sscanf(proxy, "%[^:]:%d", address, port);
+void parse_proxy(const char *proxy, char *address, unsigned short *port) {
+    sscanf(proxy, "%[^:]:%hu", address, port);
 }
 
-
-int resolve_hostname(char *hostname , char *ip) {
+int resolve_hostname(const char *hostname , char *ip) {
 	struct hostent *he;
 	struct in_addr **addr_list;
 	if((he = gethostbyname(hostname)) == NULL) {
@@ -59,7 +58,34 @@ int resolve_hostname(char *hostname , char *ip) {
 	return 0;
 }
 
-void print_buffer(char *buffer, int size) {
+int resolve_srv(const char* host, char *dname, unsigned short *port) {
+	struct __res_state res;
+	if (res_ninit(&res) != 0) {
+		return 0;
+    }
+	unsigned char answer[256];
+    int len;
+	if ((len = res_nsearch(&res, strcat("_minecraft._tcp.", host), ns_c_in, ns_t_srv, answer, sizeof(answer))) < 0) {
+		return 0;
+	}
+	ns_msg handle;
+	ns_rr rr;
+	ns_initparse(answer, len, &handle);
+	for (int i = 0; i < ns_msg_count(handle, ns_s_an); i++) {
+		if (ns_parserr(&handle, ns_s_an, i, &rr) < 0 || ns_rr_type(rr) != ns_t_srv) {
+			continue;
+		}
+		*port = ns_get16(ns_rr_rdata(rr) + 2 * NS_INT16SZ);
+		if (dn_expand(ns_msg_base(handle), ns_msg_end(handle), ns_rr_rdata(rr) + 3 * NS_INT16SZ, dname, 256) == -1) {
+			continue;
+        }
+        resolve_hostname(dname, dname);
+		return 1;
+	}
+	return 0;
+}
+
+void print_buffer(const char *buffer, int size) {
     for(int i = 0; i < size; ++i) {
         char c = buffer[i];
         if((int)c >= 32 && (int)c <= 126) {

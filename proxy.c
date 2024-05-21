@@ -27,13 +27,13 @@ void read_proxy_file(char *filename, char ***proxy_list, int *size) {
     fclose(file);
 }
 
-void build_https_proxy_connect(char *buffer, char *address, int port) {
-    sprintf(buffer, "CONNECT %s:%d HTTP/1.1\r\n\r\n", address, port);
+void build_https_proxy_connect(char *buffer, const char *address, int port) {
+    sprintf(buffer, "CONNECT %s:%hu HTTP/1.1\r\n\r\n", address, port);
 }
 
 char socks5_handshake[3] = "\x05\x01\x00";
 
-void build_socks5_proxy_connect(char *address, int port, char **buffer, int *size) {
+void build_socks5_proxy_connect(const char *address, int port, char **buffer, int *size) {
     char _buffer[256];
     _buffer[0] = (char)5;
     _buffer[1] = (char)1;

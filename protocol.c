@@ -91,7 +91,7 @@ void to_varint(int number, char **result, int *size) {
     }
 }
 
-void join_packet(char *username, char **packet, int *size) {
+void join_packet(const char *username, char **packet, int *size) {
     char *username_len_buf, *packet_len_buf;
     int username_len_size, packet_len_size;
     to_varint(strlen(username), &username_len_buf, &username_len_size);
@@ -111,7 +111,7 @@ void join_packet(char *username, char **packet, int *size) {
     free(packet_len_buf);
 }
 
-void chat_message_packet(char *message, char **packet, int *size) {
+void chat_message_packet(const char *message, char **packet, int *size) {
     char *message_len_buf, *packet_len_buf;
     int message_len_size, packet_len_size;
     to_varint(strlen(message), &message_len_buf, &message_len_size);
@@ -132,7 +132,7 @@ void chat_message_packet(char *message, char **packet, int *size) {
     free(packet_len_buf);
 }
 
-void ping_packet(char *address, int port, int action, char **packet, int *size) {
+void ping_packet(const char *address, unsigned short port, int action, char **packet, int *size) {
     char *protocol_buf, *address_len_buf, *port_buf, *packet_len_buf;
     int protocol_size, address_len_size, port_size, packet_len_size;
     to_varint(protocol, &protocol_buf, &protocol_size);
