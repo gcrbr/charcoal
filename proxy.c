@@ -27,23 +27,23 @@ void read_proxy_file(char *filename, char ***proxy_list, int *size) {
     fclose(file);
 }
 
-void build_https_proxy_connect(char *buffer, const char *address, int port) {
-    sprintf(buffer, "CONNECT %s:%hu HTTP/1.1\r\n\r\n", address, port);
+void build_https_proxy_connect(char *buffer, struct ip_address ip) {
+    sprintf(buffer, "CONNECT %s:%hu HTTP/1.1\r\n\r\n", ip.address, ip.port);
 }
 
 char socks5_handshake[3] = "\x05\x01\x00";
 
-void build_socks5_proxy_connect(const char *address, int port, char **buffer, int *size) {
+void build_socks5_proxy_connect(const struct ip_address ip, char **buffer, int *size) {
     char _buffer[256];
     _buffer[0] = (char)5;
     _buffer[1] = (char)1;
     _buffer[2] = (char)0;
     _buffer[3] = (char)3;
-    _buffer[4] = (char)(strlen(address));
-    memcpy(_buffer + 5, address, strlen(address));
-    _buffer[5 + strlen(address)] = (char)(port >> 8);
-    _buffer[6 + strlen(address)] = (char)(port & 0x80ff);
-    *size = 7 + strlen(address);
+    _buffer[4] = (char)(strlen(ip.address));
+    memcpy(_buffer + 5, ip.address, strlen(ip.address));
+    _buffer[5 + strlen(ip.address)] = (char)(ip.port >> 8);
+    _buffer[6 + strlen(ip.address)] = (char)(ip.port & 0x80ff);
+    *size = 7 + strlen(ip.address);
     *buffer = (char *)malloc(*size);
     memcpy(*buffer, _buffer, *size);
 }

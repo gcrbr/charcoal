@@ -8,14 +8,18 @@ This tool was created to experiment with C and sockets, so it may not be the bes
 
 <img src="https://i.imgur.com/wcEStE7.png" width="400">
 
-## Usage
-Compile the code first
+## Building
+**Linux, macOS:**
 ```
 gcc main.c -o charcoal -lresolv
 ```
 
-Then you can run it:
+**Windows** (tested on MinGW):
+```
+gcc main.c -o charcoal -lws2_32 -ldnsapi
+```
 
+## Usage
 ```
 ./charcoal -i address [-p port] [-t thread number] [-m mode] [-c message] [-v protocol version] [-x proxy file] [-k proxy type]
 ```

@@ -1,7 +1,9 @@
+#include <math.h>
+#include <stdio.h>
+
 extern int protocol;
 
 #define VERSION_SIZE 55
-
 struct  {
     int protocol_number;
     char *version_number;
@@ -80,7 +82,7 @@ void to_varint(int number, char **result, int *size) {
         return;
     }
     int index = 0;
-    *result = (char *)malloc(*size);
+    *result = (char *)malloc(sizeof(char) * (*size));
     while(1) {
         if(!(number & ~0x7f)) {
             (*result)[index++] = (char)number;
@@ -91,70 +93,88 @@ void to_varint(int number, char **result, int *size) {
     }
 }
 
-void join_packet(const char *username, char **packet, int *size) {
+struct packet {
+    char *buffer;
+    int size;
+};
+
+void join_packet(const char *username, struct packet *packet) {
     char *username_len_buf, *packet_len_buf;
     int username_len_size, packet_len_size;
     to_varint(strlen(username), &username_len_buf, &username_len_size);
     int packet_len = 1 + username_len_size + strlen(username);
     to_varint(packet_len, &packet_len_buf, &packet_len_size);
-    *packet = (char *)malloc(packet_len + packet_len_size);
+    packet->buffer = (char *)malloc(sizeof(char) * (packet_len + packet_len_size));
     int written = 0;
-    memcpy(*packet, packet_len_buf, packet_len_size);
+    memcpy(packet->buffer, packet_len_buf, packet_len_size);
     written += packet_len_size;
-    (*packet)[written++] = (char)0;
-    memcpy(*packet + written, username_len_buf, username_len_size);
+    (packet->buffer)[written++] = (char)0;
+    memcpy(packet->buffer + written, username_len_buf, username_len_size);
     written += username_len_size;
-    memcpy(*packet + written, username, strlen(username));
+    memcpy(packet->buffer + written, username, strlen(username));
     written += strlen(username);
-    *size = written;
+    packet->size = written;
     free(username_len_buf);
     free(packet_len_buf);
 }
 
-void chat_message_packet(const char *message, char **packet, int *size) {
+void chat_message_packet(const char *message, struct packet *packet) {
     char *message_len_buf, *packet_len_buf;
     int message_len_size, packet_len_size;
     to_varint(strlen(message), &message_len_buf, &message_len_size);
     int packet_len = 1 + 1 + message_len_size + strlen(message);
     to_varint(packet_len, &packet_len_buf, &packet_len_size);
-    *packet = (char *)malloc(packet_len + packet_len_size);
+    packet->buffer = (char *)malloc(sizeof(char) * (packet_len + packet_len_size));
     int written = 0;
-    memcpy(*packet, packet_len_buf, packet_len_size);
+    memcpy(packet->buffer, packet_len_buf, packet_len_size);
     written += packet_len_size;
-    (*packet)[written++] = (char)0;
-    (*packet)[written++] = (char)2;
-    memcpy(*packet + written, message_len_buf, message_len_size);
+    (packet->buffer)[written++] = (char)0;
+    (packet->buffer)[written++] = (char)1;
+    memcpy(packet->buffer + written, message_len_buf, message_len_size);
     written += message_len_size;
-    memcpy(*packet + written, message, strlen(message) > 256 ? 256 : strlen(message));
+    memcpy(packet->buffer + written, message, strlen(message) > 256 ? 256 : strlen(message));
     written += strlen(message);
-    *size = written;
+    packet->size = written;
     free(message_len_buf);
     free(packet_len_buf);
 }
 
-void ping_packet(const char *address, unsigned short port, int action, char **packet, int *size) {
+void ping_packet(const char *address, unsigned short port, int action, struct packet *packet) {
     char *protocol_buf, *address_len_buf, *port_buf, *packet_len_buf;
     int protocol_size, address_len_size, port_size, packet_len_size;
     to_varint(protocol, &protocol_buf, &protocol_size);
     to_varint(strlen(address), &address_len_buf, &address_len_size);
     int packet_len = 1 + protocol_size + address_len_size + strlen(address) + 2 + 1;
     to_varint(packet_len, &packet_len_buf, &packet_len_size);
-    *packet = (char *)malloc(packet_len + packet_len_size);
+    packet->buffer = (char *)malloc(sizeof(char) * (packet_len + packet_len_size));
     int written = 0;
-    memcpy(*packet, packet_len_buf, packet_len_size);
+    memcpy(packet->buffer, packet_len_buf, packet_len_size);
     written += packet_len_size;
-    (*packet)[written++] = (char)0;
-    memcpy(*packet + written, protocol_buf, protocol_size);
+    (packet->buffer)[written++] = (char)0;
+    memcpy(packet->buffer + written, protocol_buf, protocol_size);
     written += protocol_size;
-    memcpy(*packet + written, address_len_buf, address_len_size);
+    memcpy(packet->buffer + written, address_len_buf, address_len_size);
     written += address_len_size;
-    memcpy(*packet + written, address, strlen(address));
+    memcpy(packet->buffer + written, address, strlen(address));
     written += strlen(address);
-    (*packet)[written++] = (char)(port >> 8);
-    (*packet)[written++] = (char)(port & 0x80ff);
-    (*packet)[written++] = (char)action;
-    *size = written;
+    (packet->buffer)[written++] = (char)(port >> 8);
+    (packet->buffer)[written++] = (char)(port & 0x80ff);
+    (packet->buffer)[written++] = (char)action;
+    packet->size = written;
     free(protocol_buf);
     free(address_len_buf);
     free(packet_len_buf);
+}
+
+void player_packet(int onground, struct packet *packet) {
+    packet->buffer = (char *)malloc(sizeof(char) * 4);
+    packet->buffer[0] = (char)3;
+    packet->buffer[0] = (char)0;
+    packet->buffer[0] = (char)3;
+    packet->buffer[0] = (char)onground;
+    packet->size = 4;
+}
+
+int send_packet(int sock_fd, struct packet packet) {
+    return send(sock_fd, packet.buffer, packet.size, MSG_NOSIGNAL);
 }
